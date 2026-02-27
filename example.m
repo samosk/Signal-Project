@@ -18,29 +18,16 @@ X_tilde = fft2(abs(X));
 % Patch dimensions
 patch_rows = 1;
 patch_cols = 15;
-pad_rows = floor(patch_rows / 2);
-pad_cols = floor(patch_cols / 2);
 
-X_tilde_pad = padarray(abs(X_tilde), [pad_rows, pad_cols], 'symmetric', 'both');
-
-% Extract all valid patches as columns using im2col
-patches = im2col(X_tilde_pad, [patch_rows, patch_cols], 'sliding');
-
-% Compute alpha for every (s_c, r_c) position
-alpha_vals = max(patches) - min(patches);
-
-% Reshape into a 2D matrix aligned with valid center positions
-[M, N] = size(X_tilde);
-alpha_map = reshape(alpha_vals, M, N);
-
-center_idx = ceil((patch_rows * patch_cols) / 2);
-center_vals = patches(center_idx, :);
-is_local_max = reshape(center_vals == max(patches), M, N);
+local_max = ordfilt2(abs(X_tilde), patch_rows*patch_cols, ones(patch_rows, patch_cols));
+local_min = ordfilt2(abs(X_tilde), 1, ones(patch_rows, patch_cols));
+alpha = local_max - local_min;
+center_is_max = abs(X_tilde) == local_max;
 
 gamma = std2(abs(X_tilde));
-mask_bg = (alpha_map > gamma) | is_local_max;
 % A point is included in the mask if it has high local contrast
 % OR if it's the dominant peak in its neighbourhood
+mask_bg = (alpha > gamma) | center_is_max;
 
 %% STEG 4: INVERTERA BAKGRUNDSMASK
 %          -> GER FÖRGRUNDSMASK
@@ -63,25 +50,39 @@ X_bg = X_mag_bg .* exp(1j * phase_X); % j is the imaginary unit
 X_fg = X_mag_fg .* exp(1j * phase_X);
 
 x_bg = real(istft(X_bg, Fs, "Window", window)); % TODO: try 'ConjugateSymmetric', true
-x_fg = real(istft(X_fg, Fs, "Window", window));
+x_fg = real(istft(X_fg, Fs, "Window", window)); % instead of real()
 
 audiowrite("background.mp3", x_bg, Fs);
 audiowrite("foreground.mp3", x_fg, Fs);
 
 %% VISUALISERING
 
+tiny_number = 1e-7;
+
 figure;
 subplot(3, 3, [1 2]);
-imagesc(abs(fftshift(X_tilde)));
+imagesc(t, w, 20 * log10(abs(X) + tiny_number));
 title("Mixture spectrogram");
+xlabel("Time (s)");
+ylabel("Frequency (Hz)");
+
+subplot(3, 3, 3);
+imagesc(20 * log10(abs(fftshift(X_tilde))));
+title("Mixture 2DFT");
+xlabel("Rate");
+ylabel("Scale");
 
 subplot(3, 3, 6);
-mesh(abs(X_mag_bg));
+imagesc(20 * log10(abs(X_mag_bg) + tiny_number));
 title("Background 2DFT");
+xlabel("Rate");
+ylabel("Scale");
 
 subplot(3, 3, 9);
-mesh(abs(X_mag_fg));
+imagesc(20 * log10(abs(X_mag_fg) + tiny_number));
 title("Foreground 2DFT");
+xlabel("Rate");
+ylabel("Scale");
 
 %subplot(3, 3, 2);
 %spectrogram(sound, length(window), length(window)*0.5, 512, Fs, 'yaxis');
