@@ -41,3 +41,6 @@ codegen/
 
 # macOS
 .DS_Store
+
+# Script output
+output/
