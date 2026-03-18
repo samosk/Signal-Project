@@ -41,6 +41,3 @@ codegen/
 
 # macOS
 .DS_Store
-
-# Output audio files
-output/*.mp3
